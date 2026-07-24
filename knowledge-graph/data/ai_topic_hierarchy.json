@@ -1,0 +1,54 @@
+{
+  "subject": {
+    "id": "s-ai",
+    "name": "Artificial Intelligence"
+  },
+  "topics": [
+    {
+      "id": "t-ai-llm",
+      "name": "LLMs & Prompting",
+      "concepts": [
+        {"id": "c-ai-llm-001", "name": "What is an LLM", "description": "Understanding the basics of Large Language Models."},
+        {"id": "c-ai-llm-002", "name": "Tokenization", "description": "How text is converted into tokens for processing."},
+        {"id": "c-ai-llm-003", "name": "Prompt Engineering", "description": "Techniques for crafting effective prompts."},
+        {"id": "c-ai-llm-004", "name": "Few-shot / Zero-shot Learning", "description": "Guiding models with examples."},
+        {"id": "c-ai-llm-005", "name": "Temperature & Sampling", "description": "Controlling randomness and output diversity."},
+        {"id": "c-ai-llm-006", "name": "Context Windows", "description": "Understanding the limits of input text size."}
+      ]
+    },
+    {
+      "id": "t-ai-agents",
+      "name": "AI Agents & Orchestration",
+      "concepts": [
+        {"id": "c-ai-agents-001", "name": "What is an AI Agent", "description": "Definition and components of an AI agent."},
+        {"id": "c-ai-agents-002", "name": "Agent vs Skill vs Tool", "description": "Distinguishing between different functional units."},
+        {"id": "c-ai-agents-003", "name": "Autonomous vs Semi-autonomous", "description": "Levels of human involvement in agent operations."},
+        {"id": "c-ai-agents-004", "name": "Multi-agent Systems", "description": "Coordinating multiple agents for complex tasks."},
+        {"id": "c-ai-agents-005", "name": "Agent Frameworks", "description": "Overview of tools like LangChain, CrewAI."},
+        {"id": "c-ai-agents-006", "name": "Agent Evaluation & Validation", "description": "Measuring agent performance."}
+      ]
+    },
+    {
+      "id": "t-ai-tools",
+      "name": "AI Tools & Frameworks",
+      "concepts": [
+        {"id": "c-ai-tools-001", "name": "Popular AI Tools Overview", "description": "Survey of current AI tools."},
+        {"id": "c-ai-tools-002", "name": "Model Selection", "description": "Choosing the right model for text, image, or code."},
+        {"id": "c-ai-tools-003", "name": "API Integration Patterns", "description": "Best practices for connecting to AI services."},
+        {"id": "c-ai-tools-004", "name": "MCP Servers", "description": "Model Context Protocol for integrating external context."},
+        {"id": "c-ai-tools-005", "name": "Vector Databases", "description": "Storing and querying embeddings."}
+      ]
+    },
+    {
+      "id": "t-ai-rag",
+      "name": "RAG",
+      "concepts": [
+        {"id": "c-ai-rag-001", "name": "What is RAG", "description": "Introduction to Retrieval-Augmented Generation."},
+        {"id": "c-ai-rag-002", "name": "Embedding Models", "description": "Converting text to vector representations."},
+        {"id": "c-ai-rag-003", "name": "Chunking Strategies", "description": "Techniques for splitting documents."},
+        {"id": "c-ai-rag-004", "name": "Retrieval Methods", "description": "Ways to fetch relevant context (e.g., hybrid, dense)."},
+        {"id": "c-ai-rag-005", "name": "RAG Evaluation", "description": "Metrics like faithfulness, answer relevance."}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+.venv/
+env/
+
+# Node
+node_modules/
+dist/
+.cache/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Neo4j data (local)
+neo4j_data/
+neo4j_logs/
+
+# PostgreSQL data (local)
+pg_data/
+
+# Generated files
+knowledge-graph/data/generated/*.json
+
+# Test coverage
+htmlcov/
+.coverage
+coverage.xml
+
+# Alembic
+backend/migrations/versions/*.pyc

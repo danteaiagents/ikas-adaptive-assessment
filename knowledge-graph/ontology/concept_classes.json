@@ -1,0 +1,34 @@
+{
+  "classes": [
+    {"id": "cc-technique", "uri": "ikas:Technique", "label": "Technique"},
+    {"id": "cc-tool", "uri": "ikas:Tool", "label": "Tool"},
+    {"id": "cc-theory", "uri": "ikas:Theory", "label": "Theory"},
+    {"id": "cc-framework", "uri": "ikas:Framework", "label": "Framework"},
+    {"id": "cc-architecture", "uri": "ikas:Architecture", "label": "Architecture"},
+    {"id": "cc-methodology", "uri": "ikas:Methodology", "label": "Methodology"}
+  ],
+  "mappings": {
+    "c-ai-llm-001": "cc-theory",
+    "c-ai-llm-002": "cc-technique",
+    "c-ai-llm-003": "cc-technique",
+    "c-ai-llm-004": "cc-technique",
+    "c-ai-llm-005": "cc-technique",
+    "c-ai-llm-006": "cc-architecture",
+    "c-ai-agents-001": "cc-theory",
+    "c-ai-agents-002": "cc-theory",
+    "c-ai-agents-003": "cc-theory",
+    "c-ai-agents-004": "cc-architecture",
+    "c-ai-agents-005": "cc-framework",
+    "c-ai-agents-006": "cc-methodology",
+    "c-ai-tools-001": "cc-tool",
+    "c-ai-tools-002": "cc-methodology",
+    "c-ai-tools-003": "cc-architecture",
+    "c-ai-tools-004": "cc-tool",
+    "c-ai-tools-005": "cc-tool",
+    "c-ai-rag-001": "cc-architecture",
+    "c-ai-rag-002": "cc-technique",
+    "c-ai-rag-003": "cc-technique",
+    "c-ai-rag-004": "cc-technique",
+    "c-ai-rag-005": "cc-methodology"
+  }
+}
