@@ -43,7 +43,7 @@ services:
       dockerfile: Dockerfile
     container_name: ikas-backend
     ports:
-      - "5000:5000"
+      - "5001:5000"
     environment:
       - FLASK_APP=app
       - FLASK_ENV=development
@@ -54,7 +54,7 @@ services:
       - DATABASE_URL=postgresql://ikas_user:ikas_dev_password@postgres:5432/ikas
       - JWT_SECRET_KEY=dev-jwt-secret-change-in-prod
       - SECRET_KEY=dev-secret-change-in-prod
-      - CORS_ORIGINS=http://localhost:5173
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:5001
     depends_on:
       neo4j:
         condition: service_healthy

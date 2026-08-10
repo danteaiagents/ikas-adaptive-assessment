@@ -52,3 +52,4 @@ coverage.xml
 
 # Alembic
 backend/migrations/versions/*.pyc
+fix_cypher*.py

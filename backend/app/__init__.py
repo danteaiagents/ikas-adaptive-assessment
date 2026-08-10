@@ -15,6 +15,7 @@ def create_app(config_class=Config):
 
     # Create tables in development
     with app.app_context():
+        from app.models import db_models  # noqa: F401 — import models so db.create_all() sees them
         db.create_all()
 
     # Register Blueprints

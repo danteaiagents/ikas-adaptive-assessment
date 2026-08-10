@@ -16,6 +16,17 @@ from typing import Dict, Any, List, Optional
 from app.extensions import get_neo4j_session
 
 
+def _clean_cypher_json(s: str) -> str:
+    """Clean Cypher escaping artifacts from stored JSON strings."""
+    if not s:
+        return '[]'
+    return (s.replace("\\\u2019", "'")
+             .replace("\\\u2018", "'")
+             .replace("\\'", "'")
+             .replace("\u2019", "'")
+             .replace("\u2018", "'"))
+
+
 def get_question(question_id: str) -> Optional[Dict[str, Any]]:
     """Fetch a single question with its concept, options, and resources."""
     query = '''
@@ -42,7 +53,7 @@ def get_question(question_id: str) -> Optional[Dict[str, Any]]:
         data = dict(record)
         # Parse JSON string fields
         data['options'] = _parse_options(data.pop('options_json', '[]'))
-        data['correct_answers'] = json.loads(data.pop('correct_answers_json', '[]'))
+        data['correct_answers'] = json.loads(_clean_cypher_json(data.pop('correct_answers_json', '[]')))
         # Filter out null resources
         data['resources'] = [r for r in data.get('resources', []) if r.get('id')]
         return data
@@ -63,7 +74,7 @@ def get_questions_by_topic(topic_id: str) -> List[Dict[str, Any]]:
         for record in result:
             data = dict(record)
             data['options'] = _parse_options(data.pop('options_json', '[]'))
-            data['correct_answers'] = json.loads(data.pop('correct_answers_json', '[]'))
+            data['correct_answers'] = json.loads(_clean_cypher_json(data.pop('correct_answers_json', '[]')))
             questions.append(data)
         return questions
 
@@ -129,9 +140,17 @@ def get_subjects() -> List[Dict[str, Any]]:
 
 
 def _parse_options(options_json: str) -> List[Dict[str, str]]:
-    """Parse options JSON string into list of {id, text} dicts."""
+    """Parse options JSON string into list of {id, text} dicts.
+    
+    Handles edge cases from Cypher escaping:
+    - \\' (backslash-apostrophe) → just apostrophe
+    - Unicode curly quotes → straight quotes
+    """
     try:
-        raw = json.loads(options_json) if isinstance(options_json, str) else options_json
+        if not options_json or not isinstance(options_json, str):
+            return []
+        cleaned = _clean_cypher_json(options_json)
+        raw = json.loads(cleaned)
         if isinstance(raw, list):
             return [
                 {'id': f'opt_{i}', 'text': opt} if isinstance(opt, str) else opt

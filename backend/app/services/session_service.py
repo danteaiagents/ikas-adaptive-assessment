@@ -183,12 +183,21 @@ def submit_answer(
     if not q_data:
         raise ValueError(f"Question {question_id} not found")
 
+    # Map selected option IDs (e.g., "opt_0") to their text values for grading
+    options_list = q_data.get('options', [])
+    option_id_to_text = {
+        opt.get('id', f'opt_{i}'): opt.get('text', str(opt))
+        if isinstance(opt, dict) else str(opt)
+        for i, opt in enumerate(options_list)
+    }
+    selected_texts = [option_id_to_text.get(oid, oid) for oid in selected_options]
+
     # Grade the answer
     grading_result = GradingService.grade_mcq(
-        selected_options=selected_options,
+        selected_options=selected_texts,
         correct_answers=q_data.get('correct_answers', []),
         all_options=[opt.get('text', opt) if isinstance(opt, dict) else opt
-                     for opt in q_data.get('options', [])],
+                     for opt in options_list],
     )
 
     # Store response in PostgreSQL
