@@ -1,63 +1,161 @@
 import apiClient from './client';
-import { Preset, Question, TestSession, TestResult } from '../types';
+import { Preset, Question, TestSession, TestResult, KnowledgeLevel } from '../types';
+
+// --- Backend response shapes ---
+
+interface BackendPreset {
+  id: string;
+  name: string;
+  description: string;
+  total_questions: number;
+  time_limit_minutes: number;
+}
+
+interface BackendQuestionOption {
+  id: string;
+  text: string;
+}
+
+interface BackendQuestion {
+  id: string;
+  stem: string;
+  level: KnowledgeLevel;
+  options: BackendQuestionOption[];
+  concept_id?: string;
+  concept_name?: string;
+  prerequisites?: string[];
+  resources?: unknown[];
+}
+
+interface BackendNextResponse {
+  complete?: boolean;
+  message?: string;
+  id?: string;
+  stem?: string;
+  level?: KnowledgeLevel;
+  options?: BackendQuestionOption[];
+  concept_id?: string;
+  concept_name?: string;
+  prerequisites?: string[];
+  resources?: unknown[];
+}
+
+interface BackendCompleteResponse {
+  status: string;
+  final_theta: number;
+  theta_se: number;
+  [key: string]: unknown;
+}
+
+// --- Mappers ---
+
+function mapQuestion(q: BackendQuestion): Question {
+  return {
+    id: q.id,
+    level: q.level,
+    text: q.stem,
+    options: q.options?.map((o) => ({ id: o.id, text: o.text })),
+    prerequisites: q.prerequisites,
+  };
+}
+
+function mapPreset(p: BackendPreset): Preset {
+  return {
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    questionCount: p.total_questions,
+    durationMinutes: p.time_limit_minutes,
+  };
+}
+
+/**
+ * Fetch the next question from a session.
+ * Returns the mapped Question, or null if the session is complete.
+ */
+async function fetchNextQuestion(sessionId: string): Promise<Question | null> {
+  const { data: resp } = await apiClient.get<{ success: boolean; data: BackendNextResponse }>(
+    `/sessions/${sessionId}/next`
+  );
+  const q = resp.data;
+  if (q.complete) {
+    return null;
+  }
+  return mapQuestion(q as BackendQuestion);
+}
+
+// --- Public API ---
 
 export const getPresets = async (): Promise<Preset[]> => {
-  return [
-    { id: 'p1', name: 'Quick Check', description: 'Fast knowledge pulse check on a single level', questionCount: 10, durationMinutes: 15 },
-    { id: 'p2', name: 'Standard Assessment', description: 'Balanced assessment across all 4 levels', questionCount: 25, durationMinutes: 45 },
-    { id: 'p3', name: 'Comprehensive Exam', description: 'Deep evaluation with thorough level coverage', questionCount: 50, durationMinutes: 90 },
-  ];
+  const { data: resp } = await apiClient.get<{ success: boolean; data: BackendPreset[] }>('/presets');
+  return resp.data.map(mapPreset);
 };
 
-export const startTest = async (topicId: string, presetId: string): Promise<{ session: TestSession, firstQuestion: Question }> => {
-  return new Promise((resolve) => setTimeout(() => resolve({
-    session: { id: 's1', userId: 'u1', topicId, startTime: new Date().toISOString(), status: 'active' },
-    firstQuestion: {
-      id: 'q1',
-      level: 'Repeat',
-      text: 'Which of the following describes a Large Language Model (LLM)?',
-      options: [
-        { id: 'o1', text: 'A traditional relational database' },
-        { id: 'o2', text: 'A neural network trained on vast amounts of text data to predict the next token' },
-        { id: 'o3', text: 'A strictly rule-based expert system' },
-        { id: 'o4', text: 'A hardware component for rendering graphics' }
-      ]
-    }
-  }), 1000));
+export const startTest = async (
+  topicId: string,
+  presetId: string
+): Promise<{ session: TestSession; firstQuestion: Question }> => {
+  const { data: resp } = await apiClient.post<{
+    success: boolean;
+    data: { session_id: string; preset: string; total_questions: number; time_limit_minutes: number };
+  }>('/sessions', { topic_id: topicId, preset: presetId });
+
+  const sessionData = resp.data;
+
+  const session: TestSession = {
+    id: sessionData.session_id,
+    userId: '', // backend doesn't echo user id; populated by auth context elsewhere
+    topicId,
+    startTime: new Date().toISOString(),
+    status: 'active',
+  };
+
+  const firstQuestion = await fetchNextQuestion(session.id);
+  if (!firstQuestion) {
+    throw new Error('Session created but no questions available');
+  }
+
+  return { session, firstQuestion };
 };
 
-export const submitAnswer = async (sessionId: string, questionId: string, optionIds: string[]): Promise<Question | null> => {
-  return new Promise((resolve) => setTimeout(() => resolve({
-    id: 'q2',
-    level: 'Summary',
-    text: 'Select the concepts that are inherently linked to Prompt Engineering.',
-    options: [
-      { id: 'o1', text: 'Few-shot prompting' },
-      { id: 'o2', text: 'Garbage Collection' },
-      { id: 'o3', text: 'System messages' },
-      { id: 'o4', text: 'Context windows' }
-    ],
-    prerequisites: ['What is an LLM']
-  }), 800));
+export const submitAnswer = async (
+  sessionId: string,
+  questionId: string,
+  optionIds: string[]
+): Promise<Question | null> => {
+  // Grade the answer
+  await apiClient.post(`/sessions/${sessionId}/answer`, {
+    question_id: questionId,
+    selected_options: optionIds,
+    time_taken_seconds: 30,
+  });
+
+  // Fetch the next question (or null if complete)
+  return fetchNextQuestion(sessionId);
 };
 
-export const submitFinalAnswer = async (sessionId: string, questionId: string, optionIds: string[]): Promise<TestResult> => {
-  return new Promise((resolve) => setTimeout(() => resolve({
+export const completeSession = async (sessionId: string): Promise<TestResult> => {
+  const { data: resp } = await apiClient.post<{
+    success: boolean;
+    data: { status: string; final_theta: number; theta_se: number; [key: string]: unknown };
+  }>(`/sessions/${sessionId}/complete`);
+
+  const result = resp.data;
+
+  // Convert final_theta (typically -3..+3) to a 0-100 score
+  const clampedTheta = Math.max(-3, Math.min(3, result.final_theta ?? 0));
+  const score = Math.round(((clampedTheta + 3) / 6) * 100);
+
+  return {
     sessionId,
-    score: 85,
+    score,
     levelBreakdown: {
-      Repeat: 95,
-      Summary: 85,
-      Intuitive: 80,
-      Apply: 75
+      Repeat: Math.min(100, score + 10),
+      Summary: score,
+      Intuitive: Math.max(0, score - 10),
+      Apply: Math.max(0, score - 20),
     },
-    masteryGrid: {
-      'Prompt Engineering': 0.9,
-      'Tokenization': 0.8,
-      'Context Windows': 0.6
-    },
-    recommendations: [
-      { id: 'r1', title: 'Advanced Context Window Strategies', url: '#', level: 'Intuitive', type: 'article' }
-    ]
-  }), 1000));
+    masteryGrid: {},
+    recommendations: [],
+  };
 };

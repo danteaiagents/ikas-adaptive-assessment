@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { useTestStore } from '../store/testStore';
 import MCQRenderer from '../components/questions/MCQRenderer';
 import Timer from '../components/questions/Timer';
-import { submitAnswer, submitFinalAnswer } from '../api/tests';
+import { submitAnswer, completeSession } from '../api/tests';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, ShieldAlert } from 'lucide-react';
 
 const TestPage: React.FC = () => {
-  const { session, currentQuestion, responses, setResponse } = useTestStore();
+  const { session, currentQuestion, questionNumber, responses, setResponse } = useTestStore();
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -20,14 +20,14 @@ const TestPage: React.FC = () => {
   const handleNext = async () => {
     setLoading(true);
     try {
-      if (currentQuestion.id === 'q2') {
-        const result = await submitFinalAnswer(session.id, currentQuestion.id, selectedOptions);
-        navigate('/results', { state: { result } });
+      const nextQ = await submitAnswer(session.id, currentQuestion.id, selectedOptions);
+      if (nextQ) {
+        useTestStore.getState().nextQuestion(nextQ);
       } else {
-        const nextQ = await submitAnswer(session.id, currentQuestion.id, selectedOptions);
-        if (nextQ) {
-          useTestStore.getState().nextQuestion(nextQ);
-        }
+        // Session complete — fetch final results
+        const result = await completeSession(session.id);
+        useTestStore.getState().endTest();
+        navigate('/results', { state: { result } });
       }
     } catch (err) {
       console.error(err);
@@ -46,16 +46,24 @@ const TestPage: React.FC = () => {
     }
   };
 
+  // Derive total from the session's preset questionCount if available, otherwise omit the denominator
+  const totalQuestions = (session as any).questionCount as number | undefined;
+
   return (
     <div style={{ display: 'flex', gap: '2rem', height: 'calc(100vh - 100px)' }}>
       <div style={{ flex: '7', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-          <div style={{ 
-            background: `color-mix(in srgb, ${getLevelColor(currentQuestion.level)} 15%, transparent)`,
-            color: getLevelColor(currentQuestion.level),
-            border: `1px solid color-mix(in srgb, ${getLevelColor(currentQuestion.level)} 30%, transparent)`,
-          }} className="badge">
-            Level: {currentQuestion.level}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ 
+              background: `color-mix(in srgb, ${getLevelColor(currentQuestion.level)} 15%, transparent)`,
+              color: getLevelColor(currentQuestion.level),
+              border: `1px solid color-mix(in srgb, ${getLevelColor(currentQuestion.level)} 30%, transparent)`,
+            }} className="badge">
+              Level: {currentQuestion.level}
+            </div>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              Question {questionNumber}{totalQuestions ? ` of ${totalQuestions}` : ''}
+            </span>
           </div>
           <Timer />
         </div>
@@ -85,7 +93,7 @@ const TestPage: React.FC = () => {
               onClick={handleNext} 
               disabled={loading || selectedOptions.length === 0}
             >
-              {loading ? 'Processing...' : (currentQuestion.id === 'q2' ? 'Submit Assessment' : 'Submit & Continue')} 
+              {loading ? 'Processing...' : 'Submit & Continue'} 
               <ChevronRight size={18} style={{ marginLeft: '0.5rem' }} />
             </button>
           </div>
