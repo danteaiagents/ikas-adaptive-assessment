@@ -75,11 +75,38 @@ def start_session(
 ) -> TestSession:
     """
     Start a new test session and initialize the adaptive engine.
+
+    Initial theta is seeded from the user's most recent completed session for
+    the same topic so the engine doesn't restart at 0.0 every time. A small
+    random jitter (±0.1) is added to break scoring ties differently each
+    session, preventing identical question orderings across repeated attempts.
     """
+    import random
+
     # Resolve preset defaults
     preset_config = TEST_PRESETS.get(preset, TEST_PRESETS['standard'])
     final_questions = total_questions or preset_config['total_questions']
     final_time = time_limit_minutes or preset_config['time_limit_minutes']
+
+    # ── Seed theta from previous session ──────────────────────────────────
+    last_session = (
+        TestSession.query
+        .filter_by(user_id=user_id, topic_id=topic_id, status='completed')
+        .filter(TestSession.final_theta.isnot(None))
+        .order_by(TestSession.completed_at.desc())
+        .first()
+    )
+    if last_session:
+        # Clamp to ±2.5 so extreme outliers don't over-constrain the new session
+        base_theta = max(-2.5, min(2.5, last_session.final_theta))
+        logger.info(
+            f"Seeding theta={base_theta:.3f} from session {last_session.id}"
+        )
+    else:
+        base_theta = 0.0
+
+    # Small jitter ensures question ordering differs even when theta is the same
+    initial_theta = base_theta + random.uniform(-0.1, 0.1)
 
     session_id = str(uuid.uuid4())
     session = TestSession(
@@ -94,8 +121,8 @@ def start_session(
     db.session.add(session)
     db.session.commit()
 
-    # Initialize adaptive engine
-    engine = AdaptiveEngine(initial_theta=0.0)
+    # Initialize adaptive engine with seeded theta
+    engine = AdaptiveEngine(initial_theta=initial_theta)
 
     # Load concept IDs for this topic and initialize BKT states
     concept_ids = get_concept_ids_for_topic(topic_id)
@@ -106,9 +133,10 @@ def start_session(
     logger.info(
         f"Session started: {session_id}, topic={topic_id}, "
         f"preset={preset}, questions={final_questions}, time={final_time}min, "
-        f"concepts={len(concept_ids)}"
+        f"concepts={len(concept_ids)}, initial_theta={initial_theta:.3f}"
     )
     return session
+
 
 
 def get_next_question(session_id: str) -> Optional[Dict[str, Any]]:
@@ -142,8 +170,17 @@ def get_next_question(session_id: str) -> Optional[Dict[str, Any]]:
 
     prerequisite_map = get_prerequisite_map(session.topic_id)
 
+    concept_prereqs = get_concept_prerequisites(session.topic_id)
+    all_concept_ids = list(set(q['concept_id'] for q in candidates if q.get('concept_id')))
+    frontier_concepts = engine.get_concept_frontier(all_concept_ids, concept_prereqs)
+    frontier_candidates = [q for q in candidates if q.get('concept_id') in frontier_concepts]
+
+    final_candidates = frontier_candidates if frontier_candidates else candidates
+
+    logger.info(f"Session {session_id}: {len(frontier_candidates)} frontier candidates out of {len(candidates)} total")
+
     # Select next question via multi-objective optimization
-    selected = engine.select_next_question(candidates, prerequisite_map)
+    selected = engine.select_next_question(final_candidates, prerequisite_map)
     if not selected:
         return None
 
@@ -242,13 +279,18 @@ def submit_answer(
     return grading_result, update_info
 
 
-def end_session(session_id: str) -> Optional[TestSession]:
-    """End a test session, store final theta, and clean up engine."""
-    engine = _active_engines.pop(session_id, None)
+def end_session(session_id: str) -> Tuple[Optional[TestSession], Optional[Dict[str, Any]]]:
+    """End a test session, store final theta + mastery snapshot, and clean up engine."""
+    engine = _active_engines.get(session_id)
+    engine_state = engine.get_session_state() if engine else None
+
+    # Pop the engine before DB writes to free memory
+    _active_engines.pop(session_id, None)
+
     session = db.session.get(TestSession, session_id)
-    
+
     if not session:
-        return None
+        return None, None
 
     session.status = 'completed'
     session.completed_at = datetime.now(timezone.utc)
@@ -257,13 +299,29 @@ def end_session(session_id: str) -> Optional[TestSession]:
         session.final_theta = engine.theta
         session.theta_se = engine.theta_se
 
+        # ── Persist concept mastery snapshot ────────────────────────────────
+        # Reshape from {(concept_id, level): ConceptLevelState} to
+        # {concept_id: {level: {p_mastery, n_attempts, n_correct}}}
+        # This preserves the full BKT state at session end for continuity analysis.
+        mastery_snapshot: Dict[str, Any] = {}
+        for (concept_id, level), state in engine.concept_states.items():
+            if concept_id not in mastery_snapshot:
+                mastery_snapshot[concept_id] = {}
+            mastery_snapshot[concept_id][level] = {
+                'p_mastery':  round(state.p_mastery, 4),
+                'n_attempts': state.n_attempts,
+                'n_correct':  state.n_correct,
+            }
+        session.concept_mastery_snapshot = mastery_snapshot or None
+
     db.session.commit()
 
     logger.info(
         f"Session ended: {session_id}, "
-        f"theta={session.final_theta}, se={session.theta_se}"
+        f"theta={session.final_theta:.3f}, se={session.theta_se:.3f}, "
+        f"concepts_snapshotted={len(session.concept_mastery_snapshot or {})}"
     )
-    return session
+    return session, engine_state
 
 
 def get_engine_state(session_id: str) -> Optional[Dict[str, Any]]:

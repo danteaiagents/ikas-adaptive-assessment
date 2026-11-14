@@ -15,8 +15,8 @@ class UserLogin(BaseModel):
 class SessionStart(BaseModel):
     topic_id: str
     preset: str = 'standard'
-    total_questions: int = 25
-    time_limit_minutes: int = 45
+    total_questions: Optional[int] = None
+    time_limit_minutes: Optional[int] = None
 
 class AnswerSubmit(BaseModel):
     question_id: str
@@ -34,7 +34,7 @@ class QuestionOut(BaseModel):
     options: List[OptionOut]
     concept_id: str
     concept_name: str = ''
-    prerequisites: List[str] = []
+    prerequisites: List[Dict[str, Any]] = []
     resources: List[Any] = []
 
 class SessionReport(BaseModel):

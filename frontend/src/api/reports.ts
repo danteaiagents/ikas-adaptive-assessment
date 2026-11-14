@@ -1,12 +1,25 @@
 import apiClient from './client';
-import { TestResult } from '../types';
+import { ProgressData, SessionReport } from '../types';
 
-export const getProgress = async () => {
-  return new Promise((resolve) => setTimeout(() => resolve([
-    { date: '2026-07-01', score: 65 },
-    { date: '2026-07-05', score: 72 },
-    { date: '2026-07-10', score: 78 },
-    { date: '2026-07-15', score: 85 },
-    { date: '2026-07-22', score: 89 },
-  ]), 500));
+/**
+ * Fetch a user's session history and summary for a topic.
+ * GET /api/v1/progress?topic_id=<topicId>
+ */
+export const getProgress = async (topicId: string): Promise<ProgressData> => {
+  const { data: resp } = await apiClient.get<{ success: boolean; data: ProgressData }>(
+    `/progress?topic_id=${encodeURIComponent(topicId)}`
+  );
+  return resp.data;
 };
+
+/**
+ * Fetch the enriched post-session report (concept mastery, recommendations, time stats).
+ * GET /api/v1/sessions/<sessionId>/report
+ */
+export const getSessionReport = async (sessionId: string): Promise<SessionReport> => {
+  const { data: resp } = await apiClient.get<{ success: boolean; data: SessionReport }>(
+    `/sessions/${sessionId}/report`
+  );
+  return resp.data;
+};
+

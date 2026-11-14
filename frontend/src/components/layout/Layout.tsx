@@ -2,6 +2,7 @@ import React from 'react';
 import { Outlet, Navigate } from 'react-router-dom';
 import Header from './Header';
 import Sidebar from './Sidebar';
+import Toast from '../Toast';
 import { useAuthStore } from '../../store/authStore';
 
 const Layout: React.FC = () => {
@@ -20,6 +21,7 @@ const Layout: React.FC = () => {
           <Outlet />
         </main>
       </div>
+      <Toast />
     </div>
   );
 };

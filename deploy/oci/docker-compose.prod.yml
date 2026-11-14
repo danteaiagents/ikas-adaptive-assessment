@@ -1,0 +1,100 @@
+services:
+  neo4j:
+    image: neo4j:5-community
+    container_name: ikas-neo4j
+    restart: unless-stopped
+    # Do NOT expose Neo4j to internet — only accessible within Docker network
+    expose:
+      - "7687"
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD}
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+      - NEO4J_dbms_memory_heap_initial__size=256m
+      - NEO4J_dbms_memory_heap_max__size=512m
+      - NEO4J_dbms_memory_pagecache_size=256m
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: ikas-postgres
+    restart: unless-stopped
+    # Do NOT expose PostgreSQL to internet
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_DB: ikas
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ikas"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: ghcr.io/ikas/backend:${IMAGE_TAG:-latest}
+    # OR build locally: build: { context: ../../backend }
+    container_name: ikas-backend
+    restart: unless-stopped
+    expose:
+      - "5000"
+    env_file:
+      - .env.production
+    environment:
+      - FLASK_ENV=production
+      - FLASK_DEBUG=0
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/ikas
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    command: >
+      gunicorn
+      --bind 0.0.0.0:5000
+      --workers 2
+      --timeout 120
+      --access-logfile -
+      --error-logfile -
+      wsgi:app
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  frontend:
+    image: ghcr.io/ikas/frontend:${IMAGE_TAG:-latest}
+    # OR build locally: build: { context: ../../frontend }
+    container_name: ikas-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro   # SSL certs (after certbot setup)
+    depends_on:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+  pg_data:

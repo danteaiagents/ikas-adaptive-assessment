@@ -34,6 +34,20 @@ class TestSession(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at = db.Column(db.DateTime, nullable=True)
 
+    # ── Historical record columns ────────────────────────────────────────────
+    # Per-concept × per-level BKT mastery snapshot at session completion.
+    # Schema: {concept_id: {level: {p_mastery, n_attempts, n_correct}}}
+    # Powers continuity analysis: "how did mastery of Concept X progress
+    # across the student's sessions over time?"
+    concept_mastery_snapshot = db.Column(JSONB, nullable=True)
+
+    # Recommendations that were surfaced to the student at the end of this session.
+    # Schema: [{id, title, url, type, concept_id, concept_name, target_level}]
+    # Powers future effectiveness analysis: "did students who followed
+    # recommendation R improve in the next session?"
+    recommendations_snapshot = db.Column(JSONB, nullable=True)
+
+
 class Response(db.Model):
     __tablename__ = 'responses'
     id = db.Column(db.Integer, primary_key=True)

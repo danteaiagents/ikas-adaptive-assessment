@@ -64,7 +64,7 @@ def next_question(session_id):
             options=options,
             concept_id=q.get('concept_id', ''),
             concept_name=q.get('concept_name', ''),
-            prerequisites=q.get('prerequisite_ids', []),
+            prerequisites=q.get('prerequisites', []),
             resources=q.get('resources', []),
         )
         return api_response(True, data=q_out.model_dump())
@@ -106,13 +106,44 @@ def answer_question(session_id):
 @jwt_required()
 def complete_session(session_id):
     """End a test session and get final results."""
-    session = end_session(session_id)
+    session, engine_state = end_session(session_id)
     if not session:
         return api_response(False, error='Session not found', status=404)
+    
+    # Build per-level mastery breakdown from engine state
+    level_breakdown = {}
+    concept_mastery = {}
+    if engine_state and engine_state.get('concept_mastery'):
+        mastery_data = engine_state['concept_mastery']
+        level_scores = {}  # {level: [scores]}
+        for key, state in mastery_data.items():
+            level = state.get('level', 'Repeat')
+            p_mastery = state.get('p_mastery', 0.5)
+            concept_id = state.get('concept_id', '')
+            
+            if level not in level_scores:
+                level_scores[level] = []
+            level_scores[level].append(p_mastery)
+            
+            # Per-concept per-level mastery
+            if concept_id not in concept_mastery:
+                concept_mastery[concept_id] = {}
+            concept_mastery[concept_id][level] = {
+                'p_mastery': round(p_mastery, 4),
+                'n_attempts': state.get('n_attempts', 0),
+                'n_correct': state.get('n_correct', 0),
+            }
+        
+        for level, scores in level_scores.items():
+            level_breakdown[level] = round(sum(scores) / len(scores), 4) if scores else 0.0
+    
     return api_response(True, data={
         'status': 'completed',
         'final_theta': session.final_theta,
         'theta_se': session.theta_se,
+        'n_responses': engine_state.get('n_responses', 0) if engine_state else 0,
+        'level_breakdown': level_breakdown,
+        'concept_mastery': concept_mastery,
     })
 
 

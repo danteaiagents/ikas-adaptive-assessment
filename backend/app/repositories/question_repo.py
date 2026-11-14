@@ -33,30 +33,40 @@ def get_question(question_id: str) -> Optional[Dict[str, Any]]:
     MATCH (c:Concept)-[:CONTAINS]->(q:Question {id: $question_id})
     OPTIONAL MATCH (c)-[:LINKED_RESOURCE]->(r:Resource)
     WITH q, c, collect(DISTINCT {id: r.id, url: r.url, title: r.title, type: r.type, level: r.level}) AS resources
-    OPTIONAL MATCH (prereq:Question)-[:IS_PREREQUISITE_FOR]->(q)
-    WITH q, c, resources, collect(DISTINCT prereq.id) AS prerequisite_ids
-    RETURN q.id AS id, q.stem AS stem, q.level AS level, 
+    OPTIONAL MATCH (prereq_c:Concept)-[:CONTAINS]->(prereq:Question)-[:IS_PREREQUISITE_FOR]->(q)
+    WITH q, c, resources,
+         collect(DISTINCT {
+           id: prereq.id,
+           stem: prereq.stem,
+           concept_id: prereq_c.id,
+           concept_name: prereq_c.name,
+           level: prereq.level
+         }) AS prerequisites
+    RETURN q.id AS id, q.stem AS stem, q.level AS level,
            q.question_type AS question_type,
            q.options AS options_json, q.correct_answers AS correct_answers_json,
            q.explanation AS explanation,
            q.difficulty AS b, q.discrimination AS a, q.guessing AS c,
            q.time_estimate_seconds AS time_estimate_seconds,
            c.id AS concept_id, c.name AS concept_name,
-           resources, prerequisite_ids
+           resources, prerequisites
     '''
     with get_neo4j_session() as session:
         result = session.run(query, question_id=question_id)
         record = result.single()
         if not record:
             return None
-        
+
         data = dict(record)
         # Parse JSON string fields
         data['options'] = _parse_options(data.pop('options_json', '[]'))
         data['correct_answers'] = json.loads(_clean_cypher_json(data.pop('correct_answers_json', '[]')))
         # Filter out null resources
         data['resources'] = [r for r in data.get('resources', []) if r.get('id')]
+        # Filter out null prerequisite entries (OPTIONAL MATCH returns {id: null} when no prereqs)
+        data['prerequisites'] = [p for p in data.get('prerequisites', []) if p.get('id')]
         return data
+
 
 
 def get_questions_by_topic(topic_id: str) -> List[Dict[str, Any]]:

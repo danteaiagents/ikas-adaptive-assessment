@@ -76,6 +76,46 @@ def get_concept_ids_for_topic(topic_id: str) -> List[str]:
         return [r['concept_id'] for r in result]
 
 
+def get_concept_names(concept_ids: List[str]) -> Dict[str, str]:
+    """
+    Batch-fetch concept display names from Neo4j.
+    Returns {concept_id: concept_name} for each id in the input list.
+    """
+    if not concept_ids:
+        return {}
+    query = '''
+    UNWIND $concept_ids AS cid
+    MATCH (c:Concept {id: cid})
+    RETURN c.id AS concept_id, c.name AS concept_name
+    '''
+    with get_neo4j_session() as session:
+        result = session.run(query, concept_ids=concept_ids)
+        return {r['concept_id']: r['concept_name'] for r in result}
+
+
+def get_concepts_with_resources(topic_id: str) -> List[Dict[str, Any]]:
+    """
+    Get all concepts for a topic with their linked resources.
+    Returns list of {id, name, resources: [{id, url, title, type, level}]}
+    """
+    query = '''
+    MATCH (t:Topic {id: $topic_id})-[:CONTAINS]->(c:Concept)
+    OPTIONAL MATCH (c)-[:LINKED_RESOURCE]->(r:Resource)
+    WITH c, collect(DISTINCT {id: r.id, url: r.url, title: r.title, type: r.type, level: r.level}) AS resources
+    RETURN c.id AS concept_id, c.name AS concept_name, resources
+    ORDER BY c.name
+    '''
+    with get_neo4j_session() as session:
+        result = session.run(query, topic_id=topic_id)
+        out = []
+        for r in result:
+            row = dict(r)
+            # Filter out null resource entries
+            row['resources'] = [res for res in row.get('resources', []) if res.get('id')]
+            out.append(row)
+        return out
+
+
 def update_edge_probability(
     source_id: str,
     target_id: str,
@@ -94,3 +134,52 @@ def update_edge_probability(
                     target_id=target_id,
                     p_pass_pass=p_pass_pass,
                     p_pass_fail=p_pass_fail)
+
+
+def get_all_topics() -> List[Dict[str, Any]]:
+    """
+    Return all topics with their question and concept counts.
+
+    Returns list of:
+      {id, name, description, subject_id, subject_name,
+       question_count, concept_count}
+    """
+    query = '''
+    MATCH (s:Subject)-[:CONTAINS]->(t:Topic)
+    OPTIONAL MATCH (t)-[:CONTAINS]->(c:Concept)
+    OPTIONAL MATCH (c)-[:CONTAINS]->(q:Question)
+    WITH s, t, count(DISTINCT c) AS concept_count, count(DISTINCT q) AS question_count
+    RETURN t.id          AS id,
+           t.name        AS name,
+           t.description AS description,
+           s.id          AS subject_id,
+           s.name        AS subject_name,
+           concept_count,
+           question_count
+    ORDER BY s.id, t.name
+    '''
+    with get_neo4j_session() as session:
+        result = session.run(query)
+        return [dict(r) for r in result]
+
+
+def get_subject_topics(subject_id: str) -> List[Dict[str, Any]]:
+    """
+    Return topics under a specific subject with counts.
+    Useful for subject-scoped filtering.
+    """
+    query = '''
+    MATCH (s:Subject {id: $subject_id})-[:CONTAINS]->(t:Topic)
+    OPTIONAL MATCH (t)-[:CONTAINS]->(c:Concept)
+    OPTIONAL MATCH (c)-[:CONTAINS]->(q:Question)
+    WITH t, count(DISTINCT c) AS concept_count, count(DISTINCT q) AS question_count
+    RETURN t.id          AS id,
+           t.name        AS name,
+           t.description AS description,
+           concept_count,
+           question_count
+    ORDER BY t.name
+    '''
+    with get_neo4j_session() as session:
+        result = session.run(query, subject_id=subject_id)
+        return [dict(r) for r in result]

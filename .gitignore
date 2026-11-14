@@ -20,6 +20,13 @@ dist/
 .env
 .env.local
 .env.*.local
+# Production secrets — NEVER commit
+deploy/oci/.env.production
+deploy/oci/oci_account_details.md
+*.pem
+oci_config
+
+
 
 # IDE
 .vscode/

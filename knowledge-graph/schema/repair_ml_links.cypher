@@ -1,0 +1,7 @@
+// Repair: Create CONTAINS links from Concepts to Questions for ML Fundamentals
+MATCH (c:Concept {id: "c-ai-ml-001"}), (q:Question) WHERE q.id IN ["q-ai-ml-001", "q-ai-ml-002", "q-ai-ml-003", "q-ai-ml-004", "q-ai-ml-005", "q-ai-ml-006", "q-ai-ml-007", "q-ai-ml-008"] CREATE (c)-[:CONTAINS]->(q);
+MATCH (c:Concept {id: "c-ai-ml-002"}), (q:Question) WHERE q.id IN ["q-ai-ml-009", "q-ai-ml-010", "q-ai-ml-011", "q-ai-ml-012", "q-ai-ml-013", "q-ai-ml-014", "q-ai-ml-015", "q-ai-ml-016"] CREATE (c)-[:CONTAINS]->(q);
+MATCH (c:Concept {id: "c-ai-ml-003"}), (q:Question) WHERE q.id IN ["q-ai-ml-017", "q-ai-ml-018", "q-ai-ml-019", "q-ai-ml-020", "q-ai-ml-021", "q-ai-ml-022", "q-ai-ml-023", "q-ai-ml-024"] CREATE (c)-[:CONTAINS]->(q);
+MATCH (c:Concept {id: "c-ai-ml-004"}), (q:Question) WHERE q.id IN ["q-ai-ml-025", "q-ai-ml-026", "q-ai-ml-027", "q-ai-ml-028", "q-ai-ml-029", "q-ai-ml-030", "q-ai-ml-031", "q-ai-ml-032"] CREATE (c)-[:CONTAINS]->(q);
+MATCH (c:Concept {id: "c-ai-ml-005"}), (q:Question) WHERE q.id IN ["q-ai-ml-033", "q-ai-ml-034", "q-ai-ml-035", "q-ai-ml-036", "q-ai-ml-037", "q-ai-ml-038", "q-ai-ml-039", "q-ai-ml-040", "q-ai-ml-041"] CREATE (c)-[:CONTAINS]->(q);
+MATCH (c:Concept {id: "c-ai-ml-006"}), (q:Question) WHERE q.id IN ["q-ai-ml-042", "q-ai-ml-043", "q-ai-ml-044", "q-ai-ml-045", "q-ai-ml-046", "q-ai-ml-047", "q-ai-ml-048", "q-ai-ml-049", "q-ai-ml-050"] CREATE (c)-[:CONTAINS]->(q);

@@ -1,5 +1,5 @@
 import apiClient from './client';
-import { Preset, Question, TestSession, TestResult, KnowledgeLevel } from '../types';
+import { Preset, Question, Prerequisite, TestSession, TestResult, KnowledgeLevel } from '../types';
 
 // --- Backend response shapes ---
 
@@ -16,6 +16,14 @@ interface BackendQuestionOption {
   text: string;
 }
 
+interface BackendPrerequisite {
+  id: string;
+  stem: string;
+  concept_id: string;
+  concept_name: string;
+  level: KnowledgeLevel;
+}
+
 interface BackendQuestion {
   id: string;
   stem: string;
@@ -23,7 +31,7 @@ interface BackendQuestion {
   options: BackendQuestionOption[];
   concept_id?: string;
   concept_name?: string;
-  prerequisites?: string[];
+  prerequisites?: BackendPrerequisite[];
   resources?: unknown[];
 }
 
@@ -36,7 +44,7 @@ interface BackendNextResponse {
   options?: BackendQuestionOption[];
   concept_id?: string;
   concept_name?: string;
-  prerequisites?: string[];
+  prerequisites?: BackendPrerequisite[];
   resources?: unknown[];
 }
 
@@ -44,7 +52,9 @@ interface BackendCompleteResponse {
   status: string;
   final_theta: number;
   theta_se: number;
-  [key: string]: unknown;
+  n_responses: number;
+  level_breakdown: Record<string, number>;
+  concept_mastery: Record<string, Record<string, { p_mastery: number; n_attempts: number; n_correct: number }>>;
 }
 
 // --- Mappers ---
@@ -55,7 +65,13 @@ function mapQuestion(q: BackendQuestion): Question {
     level: q.level,
     text: q.stem,
     options: q.options?.map((o) => ({ id: o.id, text: o.text })),
-    prerequisites: q.prerequisites,
+    prerequisites: q.prerequisites?.map((p): Prerequisite => ({
+      id: p.id,
+      stem: p.stem ?? '',
+      concept_id: p.concept_id ?? '',
+      concept_name: p.concept_name,
+      level: p.level,
+    })),
   };
 }
 
@@ -121,13 +137,14 @@ export const startTest = async (
 export const submitAnswer = async (
   sessionId: string,
   questionId: string,
-  optionIds: string[]
+  optionIds: string[],
+  timeTakenSeconds: number
 ): Promise<Question | null> => {
   // Grade the answer
   await apiClient.post(`/sessions/${sessionId}/answer`, {
     question_id: questionId,
     selected_options: optionIds,
-    time_taken_seconds: 30,
+    time_taken_seconds: timeTakenSeconds,
   });
 
   // Fetch the next question (or null if complete)
@@ -137,7 +154,7 @@ export const submitAnswer = async (
 export const completeSession = async (sessionId: string): Promise<TestResult> => {
   const { data: resp } = await apiClient.post<{
     success: boolean;
-    data: { status: string; final_theta: number; theta_se: number; [key: string]: unknown };
+    data: BackendCompleteResponse;
   }>(`/sessions/${sessionId}/complete`);
 
   const result = resp.data;
@@ -146,16 +163,29 @@ export const completeSession = async (sessionId: string): Promise<TestResult> =>
   const clampedTheta = Math.max(-3, Math.min(3, result.final_theta ?? 0));
   const score = Math.round(((clampedTheta + 3) / 6) * 100);
 
+  // Use real level breakdown from engine (convert BKT mastery 0-1 to 0-100)
+  const levelBreakdown = {
+    Repeat:    Math.round((result.level_breakdown?.Repeat    ?? 0.5) * 100),
+    Summary:   Math.round((result.level_breakdown?.Summary   ?? 0.5) * 100),
+    Intuitive: Math.round((result.level_breakdown?.Intuitive ?? 0.5) * 100),
+    Apply:     Math.round((result.level_breakdown?.Apply     ?? 0.5) * 100),
+  };
+
+  // Build mastery grid from concept mastery: {"concept_id/level": score}
+  const masteryGrid: Record<string, number> = {};
+  if (result.concept_mastery) {
+    for (const [conceptId, levels] of Object.entries(result.concept_mastery)) {
+      for (const [level, data] of Object.entries(levels)) {
+        masteryGrid[`${conceptId}/${level}`] = Math.round(data.p_mastery * 100);
+      }
+    }
+  }
+
   return {
     sessionId,
     score,
-    levelBreakdown: {
-      Repeat: Math.min(100, score + 10),
-      Summary: score,
-      Intuitive: Math.max(0, score - 10),
-      Apply: Math.max(0, score - 20),
-    },
-    masteryGrid: {},
+    levelBreakdown,
+    masteryGrid,
     recommendations: [],
   };
 };

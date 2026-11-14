@@ -24,35 +24,63 @@ logger = logging.getLogger(__name__)
 LEVEL_ORDER = ['Repeat', 'Summary', 'Intuitive', 'Apply']
 LEVEL_INDEX = {level: i for i, level in enumerate(LEVEL_ORDER)}
 
-# Multi-objective weights
-DEFAULT_WEIGHTS = {
-    'alpha': 0.35,   # Fisher Information
-    'beta': 0.25,    # Graph Entropy reduction
-    'gamma': 0.20,   # Prerequisite Readiness
-    'delta': 0.20,   # Level Progression bonus
-}
 
-# Mastery threshold for concept frontier
-MASTERY_THRESHOLD = 0.7
+def _get_engine_config() -> dict:
+    """
+    Read adaptive engine tuning parameters from Flask app config.
+    Falls back to hardcoded defaults when called outside an app context
+    (e.g. in unit tests that don't spin up the full app).
+    """
+    try:
+        from flask import current_app
+        cfg = current_app.config
+        return {
+            'weights': {
+                'alpha': cfg.get('ENGINE_WEIGHT_ALPHA', 0.35),
+                'beta':  cfg.get('ENGINE_WEIGHT_BETA',  0.25),
+                'gamma': cfg.get('ENGINE_WEIGHT_GAMMA', 0.20),
+                'delta': cfg.get('ENGINE_WEIGHT_DELTA', 0.20),
+            },
+            'mastery_threshold': cfg.get('ENGINE_MASTERY_THRESHOLD', 0.70),
+            'bkt': {
+                'p_init':    0.5,
+                'p_transit': cfg.get('BKT_P_TRANSIT', 0.10),
+                'p_guess':   cfg.get('BKT_P_GUESS',   0.20),
+                'p_slip':    cfg.get('BKT_P_SLIP',    0.10),
+            },
+        }
+    except RuntimeError:
+        # No active Flask app context — use defaults (tests, CLI scripts)
+        return {
+            'weights': {'alpha': 0.35, 'beta': 0.25, 'gamma': 0.20, 'delta': 0.20},
+            'mastery_threshold': 0.70,
+            'bkt': {'p_init': 0.5, 'p_transit': 0.10, 'p_guess': 0.20, 'p_slip': 0.10},
+        }
 
-# Default BKT parameters
-DEFAULT_BKT = {
-    'p_init': 0.5,    # Prior mastery P(L_0)
-    'p_transit': 0.1,  # Transition P(T)
-    'p_guess': 0.2,    # Guess P(G)
-    'p_slip': 0.1,     # Slip P(S)
-}
+
+# Module-level defaults (used directly in tests / non-app contexts)
+DEFAULT_WEIGHTS = {'alpha': 0.35, 'beta': 0.25, 'gamma': 0.20, 'delta': 0.20}
+MASTERY_THRESHOLD = 0.70
+DEFAULT_BKT = {'p_init': 0.5, 'p_transit': 0.10, 'p_guess': 0.20, 'p_slip': 0.10}
 
 
 class ConceptLevelState:
     """Tracks BKT mastery state for a (concept, level) pair."""
 
-    def __init__(self, concept_id: str, level: str, p_mastery: float = 0.5):
+    def __init__(
+        self,
+        concept_id: str,
+        level: str,
+        p_mastery: float = 0.5,
+        bkt_params: Optional[Dict] = None,
+    ):
         self.concept_id = concept_id
         self.level = level
         self.p_mastery = p_mastery
         self.n_attempts = 0
         self.n_correct = 0
+        # BKT transition params — supplied by engine, fallback to module defaults
+        self._bkt = bkt_params or DEFAULT_BKT
 
     def update(self, correct: bool) -> float:
         """Update mastery via BKT after observing a response."""
@@ -62,9 +90,9 @@ class ConceptLevelState:
         self.p_mastery = bkt_update(
             self.p_mastery,
             correct,
-            DEFAULT_BKT['p_transit'],
-            DEFAULT_BKT['p_guess'],
-            DEFAULT_BKT['p_slip'],
+            self._bkt['p_transit'],
+            self._bkt['p_guess'],
+            self._bkt['p_slip'],
         )
         return self.p_mastery
 
@@ -93,12 +121,18 @@ class AdaptiveEngine:
         self,
         initial_theta: float = 0.0,
         weights: Optional[Dict[str, float]] = None,
-        mastery_threshold: float = MASTERY_THRESHOLD,
+        mastery_threshold: Optional[float] = None,
     ):
+        # Load from Flask config (or fall back to hardcoded defaults in tests)
+        engine_cfg = _get_engine_config()
+
         self.theta: float = initial_theta
         self.theta_se: float = 1.0  # Standard error of theta
-        self.weights = weights or DEFAULT_WEIGHTS
-        self.mastery_threshold = mastery_threshold
+        # Explicit overrides (from tests) take priority over config
+        self.weights = weights or engine_cfg['weights']
+        self.mastery_threshold = mastery_threshold if mastery_threshold is not None \
+            else engine_cfg['mastery_threshold']
+        self._bkt = engine_cfg['bkt']
 
         # Response history for EAP estimation: [{a, b, c, correct}, ...]
         self.response_history: List[Dict] = []
@@ -115,7 +149,7 @@ class AdaptiveEngine:
     def initialize_concepts(self, concepts: List[Dict]) -> None:
         """
         Initialize BKT states for all concepts in the test scope.
-        
+
         Args:
             concepts: List of dicts with 'id' and optionally 'levels'
         """
@@ -125,7 +159,7 @@ class AdaptiveEngine:
                 key = (concept_id, level)
                 if key not in self.concept_states:
                     self.concept_states[key] = ConceptLevelState(
-                        concept_id, level, DEFAULT_BKT['p_init']
+                        concept_id, level, self._bkt['p_init'], bkt_params=self._bkt
                     )
 
     def record_response(
@@ -171,7 +205,7 @@ class AdaptiveEngine:
         state_key = (concept_id, level)
         if state_key not in self.concept_states:
             self.concept_states[state_key] = ConceptLevelState(
-                concept_id, level, DEFAULT_BKT['p_init']
+                concept_id, level, self._bkt['p_init'], bkt_params=self._bkt
             )
         new_mastery = self.concept_states[state_key].update(correct)
 

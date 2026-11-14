@@ -12,4 +12,4 @@ def api_response(success: bool, data=None, error=None, status=200):
     }
     return jsonify(response), status
 
-from app.api.v1 import auth, tests, reports, questions
+from app.api.v1 import auth, tests, reports, questions, topics
